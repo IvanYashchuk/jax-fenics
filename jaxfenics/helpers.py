@@ -83,7 +83,7 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
         ) or np_size != fenics_size:
             err_msg = (
                 f"Cannot convert numpy array to Function:"
-                " Wrong size {numpy_array.size} vs {u.vector().size()}"
+                f"Wrong size {numpy_array.size} vs {u.vector().size()}"
             )
             raise ValueError(err_msg)
 
