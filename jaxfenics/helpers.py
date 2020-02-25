@@ -13,7 +13,7 @@ def fenics_to_numpy(fenics_var):
         fenics_vec = fenics_var.vector()
         data = fenics_vec.gather(np.arange(fenics_vec.size(), dtype="I"))
         n_sub = fenics_var.function_space().num_sub_spaces()
-        # Reshape if function is multi-component
+        # Reshape if function is in vector function space
         if n_sub != 0:
             data = np.reshape(data, (len(data) // n_sub, n_sub))
         return np.asarray(data)
