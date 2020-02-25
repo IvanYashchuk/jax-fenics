@@ -63,9 +63,6 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
             return type(fenics_var_template)(numpy_array)
 
     if isinstance(fenics_var_template, fenics.Function):
-        np_n_sub = numpy_array.shape[-1]
-        np_size = numpy_array.size
-
         function_space = fenics_var_template.function_space()
 
         u = type(fenics_var_template)(function_space)
@@ -77,6 +74,9 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
         # when FEniCS function is created
         fenics_size = u.vector().size()
         fenics_n_sub = function_space.num_sub_spaces()
+
+        np_n_sub = numpy_array.shape[-1]
+        np_size = numpy_array.size
 
         if (
             fenics_n_sub != 0 and np_n_sub != fenics_n_sub

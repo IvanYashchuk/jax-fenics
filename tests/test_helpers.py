@@ -99,3 +99,24 @@ get_aval = jax.core.get_aval
 def test_jax_to_fenics_constant(test_input, expected):
     fenics_test_input = numpy_to_fenics(test_input, fenics.Constant(0.0))
     assert numpy.allclose(fenics_test_input.values(), expected.values())
+
+
+@pytest.mark.parametrize(
+    "test_input,expected_expr",
+    [
+        (make_shaped_array(jax.numpy.ones(10)), "0.0"),
+        (jax.ad_util.Zero(), "0.0"),
+        (get_aval(jax.numpy.linspace(0.05, 0.95, num=10)), "x[0]"),
+    ],
+)
+def test_jax_to_fenics_function(test_input, expected_expr):
+    mesh = fenics.UnitIntervalMesh(10)
+    V = fenics.FunctionSpace(mesh, "DG", 0)
+    template = fenics.Function(V)
+    fenics_test_input = numpy_to_fenics(test_input, template)
+    expected = fenics.interpolate(
+        fenics.Expression(expected_expr, degree=1), V
+    )
+    assert numpy.allclose(
+        fenics_test_input.vector().get_local(), expected.vector().get_local()
+    )
