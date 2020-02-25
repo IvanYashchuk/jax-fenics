@@ -13,7 +13,7 @@ config.update("jax_enable_x64", True)
 fenics.parameters["std_out_all_processes"] = False
 fenics.set_log_level(fenics.LogLevel.ERROR)
 
-mesh = fenics.UnitSquareMesh(6, 5)
+mesh = fenics.UnitSquareMesh(3, 2)
 V = fenics.FunctionSpace(mesh, "P", 1)
 
 

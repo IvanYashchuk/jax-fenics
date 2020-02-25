@@ -67,8 +67,6 @@ def test_fenics_jvp():
     fdm_jvp0 = fdm.jvp(ff0, tangents[0])(primals[0])
     fdm_jvp1 = fdm.jvp(ff1, tangents[1])(primals[1])
 
-    _, out_tangents = jvp_fem_eval(solve_fenics, templates, primals, tangents)
+    _, out_tangent = jvp_fem_eval(solve_fenics, templates, primals, tangents)
 
-    check0 = np.allclose(fdm_jvp0, out_tangents[0])
-    check1 = np.allclose(fdm_jvp1, out_tangents[1])
-    assert check0 and check1
+    assert np.allclose(fdm_jvp0 + fdm_jvp1, out_tangent)

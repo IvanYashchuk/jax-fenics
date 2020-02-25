@@ -284,9 +284,9 @@ def jvp_fem_eval(
         fenics_output_tangents.append(u_tlm)
 
     jax_output_tangents = (fenics_to_numpy(ft) for ft in fenics_output_tangents)
-    jax_output_tangents = tuple(jax_output_tangents)
+    jax_output_tangent = sum(jax_output_tangents)
 
-    return numpy_output_primal, jax_output_tangents
+    return numpy_output_primal, jax_output_tangent
 
 
 def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
@@ -338,5 +338,73 @@ def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callabl
     djax_fem_eval_p.def_impl(lambda *args: vjp_fem_eval(ofunc, fenics_templates, *args))
 
     defvjp_all(jax_fem_eval_p, djax_fem_eval)
+
+    return jax_fem_eval
+
+
+# it seems that it is not possible to define custom vjp and jvp rules simultaneusly
+# at least I did not figure out how to do this
+# they override each other
+# therefore here I create a separate wrapped function
+def build_fwd_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
+    """Return `f(*args) = build_fem_eval(ofunc(*args), args)`. This is forward mode AD.
+    Given the FEniCS-side function ofunc(*args), return the function
+    `f(*args) = build_fem_eval(ofunc(*args), args)` with
+    the VJP of `f`, where:
+    `*args` are all arguments to `ofunc`.
+    Args:
+    ofunc: The FEniCS-side function to be wrapped.
+    Returns:
+    `f(args) = build_fem_eval(ofunc(*args), args)`
+    """
+
+    def jax_fem_eval(*args):
+        return jax_fem_eval_p.bind(*args)
+
+    jax_fem_eval_p = Primitive("jax_fem_eval")
+    jax_fem_eval_p.def_impl(lambda *args: fem_eval(ofunc, fenics_templates, *args)[0])
+
+    jax_fem_eval_p.def_abstract_eval(
+        lambda *args: jax.abstract_arrays.make_shaped_array(
+            fem_eval(ofunc, fenics_templates, *args)[0]
+        )
+    )
+
+    def jax_fem_eval_batch(vector_arg_values, batch_axes):
+        assert len(set(batch_axes)) == 1  # assert that all batch axes are same
+        assert (
+            batch_axes[0] == 0
+        )  # assert that batch axis is zero, need to rewrite for a general case?
+        # compute function row-by-row
+        res = np.asarray(
+            [
+                jax_fem_eval(*(vector_arg_values[j][i] for j in range(len(batch_axes))))
+                for i in range(vector_arg_values[0].shape[0])
+            ]
+        )
+        return res, batch_axes[0]
+
+    jax.batching.primitive_batchers[jax_fem_eval_p] = jax_fem_eval_batch
+
+    # @trace("jvp_jax_fem_eval")
+    def jvp_jax_fem_eval(ps, ts):
+        return jvp_jax_fem_eval_p.bind(ps, ts)
+
+    jvp_jax_fem_eval_p = Primitive("jvp_jax_fem_eval")
+    jvp_jax_fem_eval_p.multiple_results = True
+    jvp_jax_fem_eval_p.def_impl(
+        lambda ps, ts: jvp_fem_eval(ofunc, fenics_templates, ps, ts)
+    )
+
+    jax.interpreters.ad.primitive_jvps[jax_fem_eval_p] = jvp_jax_fem_eval
+
+    # TODO: JAX Tracer goes inside fenics wrappers and zero array is returned
+    # because fenics numpy conversion works only for concrete arrays
+    vjp_jax_fem_eval_p = Primitive("vjp_jax_fem_eval")
+    vjp_jax_fem_eval_p.def_impl(
+        lambda ct, *args: vjp_fem_eval(ofunc, fenics_templates, *args)[1](ct)
+    )
+
+    jax.interpreters.ad.primitive_transposes[jax_fem_eval_p] = vjp_jax_fem_eval_p
 
     return jax_fem_eval
