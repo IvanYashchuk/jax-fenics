@@ -19,9 +19,7 @@ def fenics_to_numpy(fenics_var):
         return np.asarray(data)
 
     if isinstance(fenics_var, fenics.GenericVector):
-        return np.asarray(
-            fenics_var.gather(np.arange(fenics_var.size(), dtype="I"))
-        )
+        return np.asarray(fenics_var.gather(np.arange(fenics_var.size(), dtype="I")))
 
     raise ValueError("Cannot convert " + str(type(fenics_var)))
 
@@ -36,9 +34,7 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
             numpy_array = jax.core.get_aval(numpy_array)
 
         if isinstance(numpy_array, (jax.abstract_arrays.ShapedArray,)):
-            if not isinstance(
-                numpy_array, (jax.abstract_arrays.ConcreteArray,)
-            ):
+            if not isinstance(numpy_array, (jax.abstract_arrays.ConcreteArray,)):
                 import warnings
 
                 warnings.warn(
@@ -78,9 +74,7 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
         np_n_sub = numpy_array.shape[-1]
         np_size = numpy_array.size
 
-        if (
-            fenics_n_sub != 0 and np_n_sub != fenics_n_sub
-        ) or np_size != fenics_size:
+        if (fenics_n_sub != 0 and np_n_sub != fenics_n_sub) or np_size != fenics_size:
             err_msg = (
                 f"Cannot convert numpy array to Function:"
                 f"Wrong size {numpy_array.size} vs {u.vector().size()}"
@@ -98,9 +92,7 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
             numpy_array = jax.core.get_aval(numpy_array)
 
         if isinstance(numpy_array, (jax.abstract_arrays.ShapedArray,)):
-            if not isinstance(
-                numpy_array, (jax.abstract_arrays.ConcreteArray,)
-            ):
+            if not isinstance(numpy_array, (jax.abstract_arrays.ConcreteArray,)):
                 import warnings
 
                 warnings.warn(

@@ -89,10 +89,7 @@ get_aval = jax.core.get_aval
         (make_shaped_array(jax.numpy.ones(1)), fenics.Constant(0.0)),
         (make_shaped_array(jax.numpy.ones(2)), fenics.Constant([0.0, 0.0])),
         (get_aval(jax.numpy.asarray(0.66)), fenics.Constant(0.66)),
-        (
-            get_aval(jax.numpy.asarray([0.5, 0.66])),
-            fenics.Constant([0.5, 0.66]),
-        ),
+        (get_aval(jax.numpy.asarray([0.5, 0.66])), fenics.Constant([0.5, 0.66]),),
         (jax.ad_util.Zero(), fenics.Constant(0.0)),
     ],
 )
@@ -114,9 +111,7 @@ def test_jax_to_fenics_function(test_input, expected_expr):
     V = fenics.FunctionSpace(mesh, "DG", 0)
     template = fenics.Function(V)
     fenics_test_input = numpy_to_fenics(test_input, template)
-    expected = fenics.interpolate(
-        fenics.Expression(expected_expr, degree=1), V
-    )
+    expected = fenics.interpolate(fenics.Expression(expected_expr, degree=1), V)
     assert numpy.allclose(
         fenics_test_input.vector().get_local(), expected.vector().get_local()
     )
