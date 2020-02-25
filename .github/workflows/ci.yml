@@ -40,6 +40,8 @@ jobs:
           conda activate fenicsproject
           python -m pip install --upgrade pip
           python -m pip install pytest
+          python -m pip install pytest-cov
+          python -m pip install coveralls
           python -m pip install --upgrade jax jaxlib
 
       - name: Install JAX-FEniCS
@@ -54,7 +56,10 @@ jobs:
 
       - name: Test with pytest
         shell: bash -l {0}
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
         run: |
           conda activate fenicsproject
           python -c "import sys; print('\n'.join(sys.path))"
-          python -m pytest tests/
+          python -m pytest --cov=jaxfenics tests/
+          coveralls
