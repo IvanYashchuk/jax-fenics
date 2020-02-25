@@ -80,7 +80,13 @@ def fem_eval(
     check_input(fenics_templates, *args)
     fenics_inputs = convert_all_to_fenics(fenics_templates, *args)
 
-    fenics_solution, residual_form = fenics_function(*fenics_inputs)
+    out = fenics_function(*fenics_inputs)
+    if not isinstance(out, tuple):
+        raise ValueError(
+            "FEniCS function output should be in the form (solution, residual_form)."
+        )
+
+    fenics_solution, residual_form = out
 
     if isinstance(fenics_solution, tuple):
         raise ValueError(
@@ -227,6 +233,8 @@ def vjp_dfem_impl(
 
     fenics_grads = []
     for fenics_input in fenics_inputs:
+        if isinstance(fenics_input, fenics.Function):
+            V = fenics_input.function_space()
         dFdm = fenics.derivative(F, fenics_input, fenics.TrialFunction(V))
         adFdm = ufl.adjoint(dFdm)
         current_args = ufl.algorithms.extract_arguments(adFdm)
