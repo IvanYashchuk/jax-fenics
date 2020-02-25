@@ -4,6 +4,12 @@ import fenics
 import numpy
 from jaxfenics import fenics_to_numpy, numpy_to_fenics
 
+import jax
+from jax.config import config
+import jax.numpy
+
+config.update("jax_enable_x64", True)
+
 
 @pytest.mark.parametrize(
     "test_input,expected",
@@ -70,3 +76,26 @@ def test_numpy_to_fenics_function():
     assert numpy.allclose(
         fenics_test_input.vector().get_local(), expected.vector().get_local()
     )
+
+
+# Test JAX specific conversions here
+make_shaped_array = jax.abstract_arrays.make_shaped_array
+get_aval = jax.core.get_aval
+
+
+@pytest.mark.parametrize(
+    "test_input,expected",
+    [
+        (make_shaped_array(jax.numpy.ones(1)), fenics.Constant(0.0)),
+        (make_shaped_array(jax.numpy.ones(2)), fenics.Constant([0.0, 0.0])),
+        (get_aval(jax.numpy.asarray(0.66)), fenics.Constant(0.66)),
+        (
+            get_aval(jax.numpy.asarray([0.5, 0.66])),
+            fenics.Constant([0.5, 0.66]),
+        ),
+        (jax.ad_util.Zero(), fenics.Constant(0.0)),
+    ],
+)
+def test_jax_to_fenics_constant(test_input, expected):
+    fenics_test_input = numpy_to_fenics(test_input, fenics.Constant(0.0))
+    assert numpy.allclose(fenics_test_input.values(), expected.values())
