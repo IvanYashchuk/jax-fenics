@@ -41,6 +41,6 @@ def test_fenics_vjp():
     )
     g = np.ones_like(numpy_output)
     jax_grad_tuple = vjp_dfem_impl(g, fenics_solution, residual_form, fenics_inputs)
-    assert np.isclose(jax_grad_tuple[0], np.asarray(-2.91792642)) and np.isclose(
-        jax_grad_tuple[1], np.asarray(2.43160535)
-    )
+    check1 = np.isclose(jax_grad_tuple[0], np.asarray(-2.91792642))
+    check2 = np.isclose(jax_grad_tuple[1], np.asarray(2.43160535))
+    assert check1 and check2
