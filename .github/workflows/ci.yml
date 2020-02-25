@@ -41,6 +41,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest
           python -m pip install pytest-cov
+          python -m pip install pytest-check
           python -m pip install coveralls
           python -m pip install fdm
           python -m pip install --upgrade jax jaxlib

@@ -1,3 +1,4 @@
+from pytest_check import check
 import fdm
 import jax
 from jax.config import config
@@ -46,44 +47,37 @@ hh = lambda x: ff(x, y_input)  # noqa: E731
 # multivariate output function of the second argument
 gg = lambda y: ff(x_input, y)  # noqa: E731
 
-fdm_jac0 = fdm.jacobian(hh)(x_input)
-jax_jac0 = jax.jacrev(hh)(x_input)
 
+def test_jacobian():
+    fdm_jac0 = fdm.jacobian(hh)(x_input)
+    jax_jac0 = jax.jacrev(hh)(x_input)
 
-def test_jacobian0():
-    assert np.allclose(fdm_jac0, jax_jac0)
+    with check:
+        assert np.allclose(fdm_jac0, jax_jac0)
 
+    rngkey = jax.random.PRNGKey(0)
+    v = jax.random.normal(rngkey, shape=(V.dim(),), dtype="float64")
 
-# random vec for vjp test
-rngkey = jax.random.PRNGKey(0)
-v = jax.random.normal(rngkey, shape=(V.dim(),), dtype="float64")
+    fdm_vjp0 = v @ fdm_jac0
+    jax_vjp0 = jax.vjp(hh, x_input)[1](v)
 
-fdm_vjp0 = v @ fdm_jac0
-jax_vjp0 = jax.vjp(hh, x_input)[1](v)
+    with check:
+        assert np.allclose(fdm_vjp0, jax_vjp0)
 
+    fdm_jac1 = fdm.jacobian(gg)(y_input)
+    jax_jac1 = jax.jacrev(gg)(y_input)
 
-def test_vjp0():
-    assert np.allclose(fdm_vjp0, jax_vjp0)
+    with check:
+        assert np.allclose(fdm_jac1, jax_jac1)
 
+    rngkey = jax.random.PRNGKey(1)
+    v = jax.random.normal(rngkey, shape=(V.dim(),), dtype="float64")
 
-fdm_jac1 = fdm.jacobian(gg)(y_input)
-jax_jac1 = jax.jacrev(gg)(y_input)
+    fdm_vjp1 = v @ fdm_jac1
+    jax_vjp1 = jax.vjp(gg, y_input)[1](v)
 
-
-def test_jacobian1():
-    assert np.allclose(fdm_jac1, jax_jac1)
-
-
-# random vec for vjp test
-rngkey = jax.random.PRNGKey(1)
-v = jax.random.normal(rngkey, shape=(V.dim(),), dtype="float64")
-
-fdm_vjp1 = v @ fdm_jac1
-jax_vjp1 = jax.vjp(gg, y_input)[1](v)
-
-
-def test_vjp1():
-    assert np.allclose(fdm_vjp1, jax_vjp1)
+    with check:
+        assert np.allclose(fdm_vjp1, jax_vjp1)
 
 
 # scalar output function
@@ -92,22 +86,19 @@ f_scalar = lambda x, y: np.sqrt(  # noqa: E731
 )
 h_scalar = lambda x: f_scalar(x, y_input)  # noqa: E731
 
-fdm_grad = fdm.gradient(h_scalar)(x_input)
-jax_grad = jax.grad(h_scalar)(x_input)
-
 
 def test_grad():
-    assert np.allclose(fdm_grad, jax_grad)
+    fdm_grad = fdm.gradient(h_scalar)(x_input)
+    jax_grad = jax.grad(h_scalar)(x_input)
 
+    with check:
+        assert np.allclose(fdm_grad, jax_grad)
 
-jax_grads = jax.grad(f_scalar, (0, 1))(x_input, y_input)
-fdm_grad0 = fdm_grad
-fdm_grad1 = fdm.gradient(lambda y: f_scalar(x_input, y))(y_input)  # noqa: E731
+    jax_grads = jax.grad(f_scalar, (0, 1))(x_input, y_input)
+    fdm_grad0 = fdm_grad
+    fdm_grad1 = fdm.gradient(lambda y: f_scalar(x_input, y))(y_input)  # noqa: E731
 
-
-def test_grad_multiple_input0():
-    assert np.allclose(fdm_grad0, jax_grads[0])
-
-
-def test_grad_multiple_input1():
-    assert np.allclose(fdm_grad1, jax_grads[1])
+    with check:
+        assert np.allclose(fdm_grad0, jax_grads[0])
+    with check:
+        assert np.allclose(fdm_grad1, jax_grads[1])
