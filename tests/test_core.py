@@ -1,11 +1,15 @@
 import jax
 from jax.config import config
 import jax.numpy as np
+import numpy as onp
 
 import fenics
 import ufl
 
+import fdm
+
 from jaxfenics import fem_eval, vjp_dfem_impl
+from jaxfenics import jvp_fem_eval
 from jaxfenics import fenics_to_numpy, numpy_to_fenics
 
 config.update("jax_enable_x64", True)
@@ -50,3 +54,21 @@ def test_fenics_vjp():
     check1 = np.isclose(jax_grad_tuple[0], np.asarray(-2.91792642))
     check2 = np.isclose(jax_grad_tuple[1], np.asarray(2.43160535))
     assert check1 and check2
+
+
+def test_fenics_jvp():
+    primals = inputs
+    tangent0 = np.asarray(onp.random.normal(size=(1,)))
+    tangent1 = np.asarray(onp.random.normal(size=(1,)))
+    tangents = (tangent0, tangent1)
+
+    ff0 = lambda x: fem_eval(solve_fenics, templates, x, primals[1])[0]  # noqa: E731
+    ff1 = lambda y: fem_eval(solve_fenics, templates, primals[0], y)[0]  # noqa: E731
+    fdm_jvp0 = fdm.jvp(ff0, tangents[0])(primals[0])
+    fdm_jvp1 = fdm.jvp(ff1, tangents[1])(primals[1])
+
+    _, out_tangents = jvp_fem_eval(solve_fenics, templates, primals, tangents)
+
+    check0 = np.allclose(fdm_jvp0, out_tangents[0])
+    check1 = np.allclose(fdm_jvp1, out_tangents[1])
+    assert check0 and check1

@@ -249,6 +249,46 @@ def vjp_dfem_impl(
     return jax_grad_tuple
 
 
+def jvp_fem_eval(
+    fenics_function: Callable,
+    fenics_templates: Iterable[FenicsVariable],
+    primals: Tuple[np.array],
+    tangents: Tuple[np.array],
+) -> Tuple[np.array]:
+    """Computes the tangent linear model
+    """
+
+    (
+        numpy_output_primal,
+        fenics_solution_primal,
+        residual_form,
+        fenics_primals,
+    ) = fem_eval(fenics_function, fenics_templates, *primals)
+
+    # Now tangent evaluation!
+    F = residual_form
+    u = fenics_solution_primal
+    V = u.function_space()
+    # TODO: this should be `hbcs = [homogenize(bc) for bc in bcs]`
+    hbcs = [fenics.DirichletBC(V, 0.0, "on_boundary")]
+
+    fenics_tangents = convert_all_to_fenics(fenics_primals, *tangents)
+    fenics_output_tangents = []
+    for fp, ft in zip(fenics_primals, fenics_tangents):
+        dFdu = fenics.derivative(F, u)
+        dFdm = fenics.derivative(F, fp, ft)
+        u_tlm = fenics.Function(V)
+        tlm_F = ufl.action(dFdu, u_tlm) + dFdm
+        tlm_F = ufl.replace(tlm_F, {u_tlm: fenics.TrialFunction(V)})
+        fenics.solve(ufl.lhs(tlm_F) == ufl.rhs(tlm_F), u_tlm, bcs=hbcs)
+        fenics_output_tangents.append(u_tlm)
+
+    jax_output_tangents = (fenics_to_numpy(ft) for ft in fenics_output_tangents)
+    jax_output_tangents = tuple(jax_output_tangents)
+
+    return numpy_output_primal, jax_output_tangents
+
+
 def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
     """Return `f(*args) = build_fem_eval(ofunc(*args), args)`.
     Given the FEniCS-side function ofunc(*args), return the function
