@@ -7,6 +7,7 @@ import fenics
 import ufl
 
 from jaxfenics import fem_eval, vjp_dfem_impl, build_fem_eval
+from jaxfenics import fenics_to_numpy, numpy_to_fenics
 
 config.update("jax_enable_x64", True)
 
@@ -33,6 +34,12 @@ def solve_fenics(kappa0, kappa1):
 
 templates = (fenics.Constant(0.0), fenics.Constant(0.0))
 inputs = (np.ones(1) * 0.5, np.ones(1) * 0.6)
+
+
+def test_fenics_forward():
+    numpy_output, _, _, _ = fem_eval(solve_fenics, templates, *inputs)
+    u, _ = solve_fenics(fenics.Constant(0.5), fenics.Constant(0.6))
+    assert np.allclose(numpy_output, fenics_to_numpy(u))
 
 
 def test_fenics_vjp():
