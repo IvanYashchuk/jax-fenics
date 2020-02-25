@@ -69,6 +69,7 @@ def fem_eval(
     """Computes the output of a fenics_function and saves a corresponding gradient tape
     Input:
         fenics_function (callable): FEniCS function to be executed during the forward pass
+        fenics_templates (iterable of FenicsVariable): Templates for converting arrays to FEniCS types
         args (tuple): jax array representation of the input to fenics_function
     Output:
         numpy_output (np.array): JAX array representation of the output from fenics_function(*fenics_inputs)
@@ -97,7 +98,148 @@ def fem_eval(
         )
 
     numpy_output = np.asarray(fenics_to_numpy(fenics_solution))
-    return numpy_output, residual_form, fenics_inputs
+    return numpy_output, fenics_solution, residual_form, fenics_inputs
+
+
+def vjp_fem_eval(fenics_function, fenics_templates, *args):
+    """Computes the gradients of the output with respect to the input
+    Input:
+        fenics_function (callable): FEniCS function to be executed during the forward pass
+        args (tuple): jax array representation of the input to fenics_function
+    Output:
+        A pair where the first element is the value of fun applied to the arguments and the second element
+        is a Python callable representing the VJP map from output cotangents to input cotangents.
+        The returned VJP function must accept a value with the same shape as the value of fun applied
+        to the arguments and must return a tuple with length equal to the number of positional arguments to fun.
+    """
+
+    numpy_output, fenics_solution, residual_form, fenics_inputs = fem_eval(
+        fenics_function, fenics_templates, *args
+    )
+
+    # @trace("vjp_fun1")
+    def vjp_fun1(g):
+        return vjp_fun1_p.bind(g)
+
+    vjp_fun1_p = Primitive("vjp_fun1")
+    vjp_fun1_p.multiple_results = True
+    vjp_fun1_p.def_impl(
+        lambda g: tuple(
+            vjp if vjp is not None else jax.ad_util.zeros_like_jaxval(args[i])
+            for i, vjp in enumerate(
+                vjp_dfem_impl(g, fenics_solution, residual_form, fenics_inputs)
+            )
+        )
+    )
+
+    # @trace("vjp_fun1_abstract_eval")
+    def vjp_fun1_abstract_eval(g):
+        if len(args) > 1:
+            return tuple(
+                (jax.abstract_arrays.ShapedArray(arg.shape, arg.dtype) for arg in args)
+            )
+        else:
+            return (
+                jax.abstract_arrays.ShapedArray((1, *args[0].shape), args[0].dtype),
+            )
+
+    vjp_fun1_p.def_abstract_eval(vjp_fun1_abstract_eval)
+
+    # @trace("vjp_fun1_batch")
+    def vjp_fun1_batch(vector_arg_values, batch_axes):
+        """Computes the batched version of the primitive.
+
+        This must be a JAX-traceable function.
+
+        Since the vjp_fun1 primitive already operates pointwise on arbitrary
+        dimension tensors, to batch it we can use the primitive itself. This works as
+        long as both the inputs have the same dimensions and are batched along the
+        same axes. The result is batched along the axis that the inputs are batched.
+
+        Args:
+            vector_arg_values: a tuple of two arguments, each being a tensor of matching
+            shape.
+            batch_axes: the axes that are being batched. See vmap documentation.
+        Returns:
+            a tuple of the result, and the result axis that was batched.
+        """
+        # _trace("Using vjp_fun1 to compute the batch:")
+        assert (
+            batch_axes[0] == 0
+        )  # assert that batch axis is zero, need to rewrite for a general case?
+        # compute function row-by-row
+        res = np.asarray(
+            [
+                vjp_fun1(vector_arg_values[0][i])
+                for i in range(vector_arg_values[0].shape[0])
+            ]
+        )
+        return [res[:, i] for i in range(len(args))], (batch_axes[0],) * len(args)
+
+    jax.batching.primitive_batchers[vjp_fun1_p] = vjp_fun1_batch
+
+    return numpy_output, vjp_fun1
+
+
+def _action(A, x):
+    A = ufl.algorithms.expand_derivatives(A)
+    if A.integrals() != ():  # form is not empty:
+        return ufl.action(A, x)
+    else:
+        return A  # form is empty, doesn't matter
+
+
+# @trace("vjp_dfem_impl")
+def vjp_dfem_impl(g, fenics_solution, fenics_residual, fenics_inputs):
+    """Computes the gradients of the output with respect to the inputs."""
+    # Convert tangent covector (adjoint) to a FEniCS variable
+    adj_value = numpy_to_fenics(g, fenics_solution)
+    adj_value = adj_value.vector()
+
+    F = fenics_residual
+    u = fenics_solution
+    V = u.function_space()
+    dFdu = fenics.derivative(F, u)
+    adFdu = ufl.adjoint(
+        dFdu, reordered_arguments=ufl.algorithms.extract_arguments(dFdu)
+    )
+
+    u_adj = fenics.Function(V)
+    adj_F = ufl.action(adFdu, u_adj)
+    adj_F = ufl.replace(adj_F, {u_adj: fenics.TrialFunction(V)})
+    adj_F_assembled = fenics.assemble(adj_F)
+
+    # TODO: this should be `hbcs = [homogenize(bc) for bc in bcs]`
+    hbcs = [fenics.DirichletBC(V, 0.0, "on_boundary")]
+
+    for bc in hbcs:
+        bc.apply(adj_F_assembled)
+        bc.apply(adj_value)
+
+    fenics.solve(adj_F_assembled, u_adj.vector(), adj_value)
+
+    fenics_grads = []
+    for fenics_input in fenics_inputs:
+        dFdm = fenics.derivative(F, fenics_input, fenics.TrialFunction(V))
+        adFdm = ufl.adjoint(dFdm)
+        current_args = ufl.algorithms.extract_arguments(adFdm)
+        correct_args = [fenics.TestFunction(V), fenics.TrialFunction(V)]
+        adFdm = ufl.replace(adFdm, dict(list(zip(current_args, correct_args))))
+        result = fenics.assemble(-_action(adFdm, u_adj))
+        if isinstance(fenics_input, fenics.Constant):
+            fenics_grad = fenics.Constant(result.sum())
+        else:  # fenics.Function
+            fenics_grad = fenics.Function(V, result)
+        fenics_grads.append(fenics_grad)
+
+    # Convert FEniCS gradients to jax array representation
+    jax_grads = (
+        None if fg is None else np.asarray(fenics_to_numpy(fg)) for fg in fenics_grads
+    )
+
+    jax_grad_tuple = tuple(jax_grads)
+
+    return jax_grad_tuple
 
 
 def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
