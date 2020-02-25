@@ -64,7 +64,7 @@ def convert_all_to_fenics(
 def fem_eval(
     fenics_function: Callable,
     fenics_templates: Iterable[FenicsVariable],
-    *args: FenicsVariable,
+    *args: np.array,
 ) -> Tuple[np.array, ufl.Form, Tuple[FenicsVariable]]:
     """Computes the output of a fenics_function and saves a corresponding gradient tape
     Input:
@@ -101,7 +101,9 @@ def fem_eval(
     return numpy_output, fenics_solution, residual_form, fenics_inputs
 
 
-def vjp_fem_eval(fenics_function, fenics_templates, *args):
+def vjp_fem_eval(
+    fenics_function: Callable, fenics_templates: FenicsVariable, *args: np.array
+) -> Tuple[np.array, Callable]:
     """Computes the gradients of the output with respect to the input
     Input:
         fenics_function (callable): FEniCS function to be executed during the forward pass
@@ -190,7 +192,12 @@ def _action(A, x):
 
 
 # @trace("vjp_dfem_impl")
-def vjp_dfem_impl(g, fenics_solution, fenics_residual, fenics_inputs):
+def vjp_dfem_impl(
+    g: np.array,
+    fenics_solution: fenics.Function,
+    fenics_residual: ufl.Form,
+    fenics_inputs: List[FenicsVariable],
+) -> Tuple[np.array]:
     """Computes the gradients of the output with respect to the inputs."""
     # Convert tangent covector (adjoint) to a FEniCS variable
     adj_value = numpy_to_fenics(g, fenics_solution)
