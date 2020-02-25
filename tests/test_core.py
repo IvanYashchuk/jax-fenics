@@ -1,4 +1,3 @@
-import fdm
 import jax
 from jax.config import config
 import jax.numpy as np
@@ -6,7 +5,7 @@ import jax.numpy as np
 import fenics
 import ufl
 
-from jaxfenics import fem_eval, vjp_dfem_impl, build_fem_eval
+from jaxfenics import fem_eval, vjp_dfem_impl
 from jaxfenics import fenics_to_numpy, numpy_to_fenics
 
 config.update("jax_enable_x64", True)
