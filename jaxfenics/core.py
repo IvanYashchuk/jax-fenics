@@ -14,7 +14,7 @@ def build_fem_eval(ofunc, fenics_templates):
     """Return `f(*args) = build_fem_eval(ofunc(*args), args)`.
     Given the FEniCS-side function ofunc(*args), return the function
     `f(*args) = build_fem_eval(ofunc(*args), args)` with
-    the VJP of `f` defined using `vjp_odeint`, where:
+    the VJP of `f`, where:
     `*args` are all arguments to `ofunc`.
     Args:
     ofunc: The FEniCS-side function to be wrapped.
