@@ -72,14 +72,14 @@ def fem_eval(
         args (tuple): jax array representation of the input to fenics_function
     Output:
         numpy_output (np.array): JAX array representation of the output from fenics_function(*fenics_inputs)
-        F_form (ufl.Form): UFL Form for the residual used to solve the problem with fenics.solve(F==0, ...)
+        residual_form (ufl.Form): UFL Form for the residual used to solve the problem with fenics.solve(F==0, ...)
         fenics_inputs (list of FenicsVariable): FEniCS representation of the input args
     """
 
     check_input(fenics_templates, *args)
     fenics_inputs = convert_all_to_fenics(fenics_templates, *args)
 
-    fenics_solution, F_form = fenics_function(*fenics_inputs)
+    fenics_solution, residual_form = fenics_function(*fenics_inputs)
 
     if isinstance(fenics_solution, tuple):
         raise ValueError(
@@ -88,16 +88,16 @@ def fem_eval(
 
     if not isinstance(fenics_solution, fenics.Function):
         raise ValueError(
-            f"FEniCS function output should be in the form (solution, F_form). Got {type(fenics_solution)} instead of fenics.Function"
+            f"FEniCS function output should be in the form (solution, residual_form). Got {type(fenics_solution)} instead of fenics.Function"
         )
 
-    if not isinstance(F_form, ufl.Form):
+    if not isinstance(residual_form, ufl.Form):
         raise ValueError(
-            f"FEniCS function output should be in the form (solution, F_form). Got {type(F_form)} instead of ufl.Form"
+            f"FEniCS function output should be in the form (solution, residual_form). Got {type(residual_form)} instead of ufl.Form"
         )
 
     numpy_output = np.asarray(fenics_to_numpy(fenics_solution))
-    return numpy_output, F_form, fenics_inputs
+    return numpy_output, residual_form, fenics_inputs
 
 
 def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
