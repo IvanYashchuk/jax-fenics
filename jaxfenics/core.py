@@ -1,4 +1,5 @@
 import fenics
+import ufl
 
 import jax
 import jax.numpy as np
@@ -9,7 +10,7 @@ from jax.api import defjvp_all
 
 from .helpers import numpy_to_fenics, fenics_to_numpy
 
-from typing import Type, List, Union, Iterable, Callable
+from typing import Type, List, Union, Iterable, Callable, Tuple
 
 FenicsVariable = Union[fenics.Constant, fenics.Function]
 
@@ -58,6 +59,45 @@ def convert_all_to_fenics(
     for inp, template in zip(args, fenics_templates):
         fenics_inputs.append(numpy_to_fenics(inp, template))
     return fenics_inputs
+
+
+def fem_eval(
+    fenics_function: Callable,
+    fenics_templates: Iterable[FenicsVariable],
+    *args: FenicsVariable,
+) -> Tuple[np.array, ufl.Form, Tuple[FenicsVariable]]:
+    """Computes the output of a fenics_function and saves a corresponding gradient tape
+    Input:
+        fenics_function (callable): FEniCS function to be executed during the forward pass
+        args (tuple): jax array representation of the input to fenics_function
+    Output:
+        numpy_output (np.array): JAX array representation of the output from fenics_function(*fenics_inputs)
+        F_form (ufl.Form): UFL Form for the residual used to solve the problem with fenics.solve(F==0, ...)
+        fenics_inputs (list of FenicsVariable): FEniCS representation of the input args
+    """
+
+    check_input(fenics_templates, *args)
+    fenics_inputs = convert_all_to_fenics(fenics_templates, *args)
+
+    fenics_solution, F_form = fenics_function(*fenics_inputs)
+
+    if isinstance(fenics_solution, tuple):
+        raise ValueError(
+            "Only single solution output from FEniCS function is supported."
+        )
+
+    if not isinstance(fenics_solution, fenics.Function):
+        raise ValueError(
+            f"FEniCS function output should be in the form (solution, F_form). Got {type(fenics_solution)} instead of fenics.Function"
+        )
+
+    if not isinstance(F_form, ufl.Form):
+        raise ValueError(
+            f"FEniCS function output should be in the form (solution, F_form). Got {type(F_form)} instead of ufl.Form"
+        )
+
+    numpy_output = np.asarray(fenics_to_numpy(fenics_solution))
+    return numpy_output, F_form, fenics_inputs
 
 
 def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
