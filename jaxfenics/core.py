@@ -260,4 +260,43 @@ def build_fem_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callabl
     Returns:
     `f(args) = build_fem_eval(ofunc(*args), args)`
     """
-    raise NotImplementedError
+
+    def jax_fem_eval(*args):
+        return jax_fem_eval_p.bind(*args)
+
+    jax_fem_eval_p = Primitive("jax_fem_eval")
+    jax_fem_eval_p.def_impl(lambda *args: fem_eval(ofunc, fenics_templates, *args)[0])
+
+    jax_fem_eval_p.def_abstract_eval(
+        lambda *args: jax.abstract_arrays.make_shaped_array(
+            fem_eval(ofunc, fenics_templates, *args)[0]
+        )
+    )
+
+    def jax_fem_eval_batch(vector_arg_values, batch_axes):
+        assert len(set(batch_axes)) == 1  # assert that all batch axes are same
+        assert (
+            batch_axes[0] == 0
+        )  # assert that batch axis is zero, need to rewrite for a general case?
+        # compute function row-by-row
+        res = np.asarray(
+            [
+                jax_fem_eval(*(vector_arg_values[j][i] for j in range(len(batch_axes))))
+                for i in range(vector_arg_values[0].shape[0])
+            ]
+        )
+        return res, batch_axes[0]
+
+    jax.batching.primitive_batchers[jax_fem_eval_p] = jax_fem_eval_batch
+
+    # @trace("djax_fem_eval")
+    def djax_fem_eval(*args):
+        return djax_fem_eval_p.bind(*args)
+
+    djax_fem_eval_p = Primitive("djax_fem_eval")
+    # djax_fem_eval_p.multiple_results = True
+    djax_fem_eval_p.def_impl(lambda *args: vjp_fem_eval(ofunc, fenics_templates, *args))
+
+    defvjp_all(jax_fem_eval_p, djax_fem_eval)
+
+    return jax_fem_eval
