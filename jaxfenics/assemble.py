@@ -84,50 +84,13 @@ def vjp_assemble_eval(
         fenics_function, fenics_templates, *args
     )
 
-    # @trace("vjp_fun1")
-    def vjp_fun1(g):
-        return vjp_fun1_p.bind(g)
-
-    vjp_fun1_p = Primitive("vjp_fun1")
-    vjp_fun1_p.multiple_results = True
-    vjp_fun1_p.def_impl(
-        lambda g: tuple(
+    def vjp_fun(g):
+        return tuple(
             vjp if vjp is not None else jax.ad_util.zeros_like_jaxval(args[i])
             for i, vjp in enumerate(vjp_assemble_impl(g, ufl_form, fenics_inputs))
         )
-    )
 
-    # @trace("vjp_fun1_abstract_eval")
-    def vjp_fun1_abstract_eval(g):
-        if len(args) > 1:
-            return tuple(
-                (jax.abstract_arrays.ShapedArray(arg.shape, arg.dtype) for arg in args)
-            )
-        else:
-            return (
-                jax.abstract_arrays.ShapedArray((1, *args[0].shape), args[0].dtype),
-            )
-
-    vjp_fun1_p.def_abstract_eval(vjp_fun1_abstract_eval)
-
-    # @trace("vjp_fun1_batch")
-    def vjp_fun1_batch(vector_arg_values, batch_axes):
-        # _trace("Using vjp_fun1 to compute the batch:")
-        assert (
-            batch_axes[0] == 0
-        )  # assert that batch axis is zero, need to rewrite for a general case?
-        # compute function row-by-row
-        res = np.asarray(
-            [
-                vjp_fun1(vector_arg_values[0][i])
-                for i in range(vector_arg_values[0].shape[0])
-            ]
-        )
-        return [res[:, i] for i in range(len(args))], (batch_axes[0],) * len(args)
-
-    jax.batching.primitive_batchers[vjp_fun1_p] = vjp_fun1_batch
-
-    return numpy_output, vjp_fun1
+    return numpy_output, vjp_fun
 
 
 # @trace("vjp_assemble_impl")
