@@ -15,7 +15,10 @@ def fenics_to_numpy(fenics_var):
 
     if isinstance(fenics_var, fenics.Function):
         fenics_vec = fenics_var.vector()
-        data = fenics_vec.gather(np.arange(fenics_vec.size(), dtype="I"))
+        if fenics_vec.mpi_comm().size > 1:
+            data = fenics_vec.gather(np.arange(fenics_vec.size(), dtype="I"))
+        else:
+            data = fenics_vec.get_local()
         n_sub = fenics_var.function_space().num_sub_spaces()
         # Reshape if function is in vector function space
         if n_sub != 0:
@@ -23,7 +26,11 @@ def fenics_to_numpy(fenics_var):
         return np.asarray(data)
 
     if isinstance(fenics_var, fenics.GenericVector):
-        return np.asarray(fenics_var.gather(np.arange(fenics_var.size(), dtype="I")))
+        if fenics_var.mpi_comm().size > 1:
+            data = fenics_var.gather(np.arange(fenics_var.size(), dtype="I"))
+        else:
+            data = fenics_var.get_local()
+        return np.asarray(data)
 
     raise ValueError("Cannot convert " + str(type(fenics_var)))
 
