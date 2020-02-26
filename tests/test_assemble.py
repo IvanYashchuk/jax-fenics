@@ -31,6 +31,10 @@ def assemble_fenics(u, kappa0, kappa1):
 
 templates = (fenics.Function(V), fenics.Constant(0.0), fenics.Constant(0.0))
 inputs = (np.ones(V.dim()), np.ones(1) * 0.5, np.ones(1) * 0.6)
+ff = lambda *args: assemble_eval(assemble_fenics, templates, *args)[0]  # noqa: E731
+ff0 = lambda x: ff(x, inputs[1], inputs[2])  # noqa: E731
+ff1 = lambda y: ff(inputs[0], y, inputs[2])  # noqa: E731
+ff2 = lambda z: ff(inputs[0], inputs[1], z)  # noqa: E731
 
 
 def test_fenics_forward():
@@ -45,10 +49,6 @@ def test_vjp_assemble_eval():
     g = np.ones_like(numpy_output)
     vjp_out = vjp_fun(g)
 
-    ff = lambda *args: assemble_eval(assemble_fenics, templates, *args)[0]  # noqa: E731
-    ff0 = lambda x: ff(x, inputs[1], inputs[2])  # noqa: E731
-    ff1 = lambda y: ff(inputs[0], y, inputs[2])  # noqa: E731
-    ff2 = lambda z: ff(inputs[0], inputs[1], z)  # noqa: E731
     fdm_jac0 = fdm.jacobian(ff0)(inputs[0])
     fdm_jac1 = fdm.jacobian(ff1)(inputs[1])
     fdm_jac2 = fdm.jacobian(ff2)(inputs[2])
@@ -66,10 +66,6 @@ def test_jvp_assemble_eval():
     tangent2 = np.asarray(onp.random.normal(size=(1,)))
     tangents = (tangent0, tangent1, tangent2)
 
-    ff = lambda *args: assemble_eval(assemble_fenics, templates, *args)[0]  # noqa: E731
-    ff0 = lambda x: ff(x, primals[1], primals[2])  # noqa: E731
-    ff1 = lambda y: ff(primals[0], y, primals[2])  # noqa: E731
-    ff2 = lambda z: ff(primals[0], primals[1], z)  # noqa: E731
     fdm_jvp0 = fdm.jvp(ff0, tangents[0])(primals[0])
     fdm_jvp1 = fdm.jvp(ff1, tangents[1])(primals[1])
     fdm_jvp2 = fdm.jvp(ff2, tangents[2])(primals[2])
