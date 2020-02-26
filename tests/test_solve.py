@@ -8,8 +8,8 @@ import ufl
 
 import fdm
 
-from jaxfenics import fem_eval, vjp_dfem_impl
-from jaxfenics import jvp_fem_eval
+from jaxfenics import solve_eval, vjp_solve_eval_impl
+from jaxfenics import jvp_solve_eval
 from jaxfenics import fenics_to_numpy, numpy_to_fenics
 
 config.update("jax_enable_x64", True)
@@ -40,17 +40,19 @@ inputs = (np.ones(1) * 0.5, np.ones(1) * 0.6)
 
 
 def test_fenics_forward():
-    numpy_output, _, _, _ = fem_eval(solve_fenics, templates, *inputs)
+    numpy_output, _, _, _ = solve_eval(solve_fenics, templates, *inputs)
     u, _ = solve_fenics(fenics.Constant(0.5), fenics.Constant(0.6))
     assert np.allclose(numpy_output, fenics_to_numpy(u))
 
 
 def test_fenics_vjp():
-    numpy_output, fenics_solution, residual_form, fenics_inputs = fem_eval(
+    numpy_output, fenics_solution, residual_form, fenics_inputs = solve_eval(
         solve_fenics, templates, *inputs
     )
     g = np.ones_like(numpy_output)
-    jax_grad_tuple = vjp_dfem_impl(g, fenics_solution, residual_form, fenics_inputs)
+    jax_grad_tuple = vjp_solve_eval_impl(
+        g, fenics_solution, residual_form, fenics_inputs
+    )
     check1 = np.isclose(jax_grad_tuple[0], np.asarray(-2.91792642))
     check2 = np.isclose(jax_grad_tuple[1], np.asarray(2.43160535))
     assert check1 and check2
@@ -62,11 +64,11 @@ def test_fenics_jvp():
     tangent1 = np.asarray(onp.random.normal(size=(1,)))
     tangents = (tangent0, tangent1)
 
-    ff0 = lambda x: fem_eval(solve_fenics, templates, x, primals[1])[0]  # noqa: E731
-    ff1 = lambda y: fem_eval(solve_fenics, templates, primals[0], y)[0]  # noqa: E731
+    ff0 = lambda x: solve_eval(solve_fenics, templates, x, primals[1])[0]  # noqa: E731
+    ff1 = lambda y: solve_eval(solve_fenics, templates, primals[0], y)[0]  # noqa: E731
     fdm_jvp0 = fdm.jvp(ff0, tangents[0])(primals[0])
     fdm_jvp1 = fdm.jvp(ff1, tangents[1])(primals[1])
 
-    _, out_tangent = jvp_fem_eval(solve_fenics, templates, primals, tangents)
+    _, out_tangent = jvp_solve_eval(solve_fenics, templates, primals, tangents)
 
     assert np.allclose(fdm_jvp0 + fdm_jvp1, out_tangent)

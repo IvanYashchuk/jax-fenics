@@ -7,7 +7,7 @@ import jax.numpy as np
 import fenics
 import ufl
 
-from jaxfenics import build_fwd_fem_eval
+from jaxfenics import build_jax_solve_eval_fwd
 
 config.update("jax_enable_x64", True)
 fenics.parameters["std_out_all_processes"] = False
@@ -35,7 +35,7 @@ def solve_fenics(kappa0, kappa1):
 
 
 templates = (fenics.Constant(0.0), fenics.Constant(0.0))
-jax_fem_eval = build_fwd_fem_eval(solve_fenics, templates)
+jax_fem_eval = build_jax_solve_eval_fwd(solve_fenics, templates)
 
 # multivariate output function
 ff = lambda x, y: np.sqrt(np.square(jax_fem_eval(np.sqrt(x ** 3), y)))  # noqa: E731
