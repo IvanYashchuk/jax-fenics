@@ -1,6 +1,6 @@
 import fenics
 import jax
-import jax.numpy as np
+import numpy as np
 
 from typing import Type, List, Union, Iterable, Callable, Tuple
 
@@ -115,6 +115,9 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
             numpy_array = numpy_array.val
 
         range_begin, range_end = u.vector().local_range()
+        # up to this point `numpy_array` could be JAX array
+        # get NumPy array instead of JAX because the following slicing and reshaping is extremely slow for JAX arrays
+        numpy_array = np.asarray(numpy_array)
         local_array = numpy_array.reshape(fenics_size)[range_begin:range_end]
         u.vector().set_local(local_array)
         u.vector().apply("insert")

@@ -28,7 +28,7 @@ config.update("jax_enable_x64", True)
 fn.set_log_level(fn.LogLevel.ERROR)
 
 # Create mesh, refined in the center
-n = 16
+n = 64
 mesh = fn.UnitSquareMesh(n, n)
 
 cf = fn.MeshFunction("bool", mesh, mesh.geometry().dim())
