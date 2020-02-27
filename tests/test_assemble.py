@@ -77,7 +77,7 @@ def test_jvp_assemble_eval():
     assert np.allclose(fdm_jvp0 + fdm_jvp1 + fdm_jvp2, out_tangent)
 
 
-hh = build_jax_assemble_eval(assemble_fenics, templates)
+hh = build_jax_assemble_eval(templates)(assemble_fenics)
 hh0 = lambda x: hh(x, inputs[1], inputs[2])  # noqa: E731
 hh1 = lambda y: hh(inputs[0], y, inputs[2])  # noqa: E731
 hh2 = lambda z: hh(inputs[0], inputs[1], z)  # noqa: E731

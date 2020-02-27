@@ -157,62 +157,63 @@ def jvp_assemble_eval(
     return numpy_output_primal, jax_output_tangent
 
 
-def build_jax_assemble_eval(
-    ofunc: Callable, fenics_templates: FenicsVariable
-) -> Callable:
-    """Return `f(*args) = build_jax_assemble_eval(ofunc(*args), args)`.
+def build_jax_assemble_eval(fenics_templates: FenicsVariable) -> Callable:
+    """Return `f(*args) = build_jax_assemble_eval(*args)(ofunc(*args))`.
     Given the FEniCS-side function ofunc(*args), return the function
-    `f(*args) = build_jax_assemble_eval(ofunc(*args), args)` with
+    `f(*args) = build_jax_assemble_eval(*args)(ofunc(*args))` with
     the VJP of `f`, where:
     `*args` are all arguments to `ofunc`.
     Args:
     ofunc: The FEniCS-side function to be wrapped.
     Returns:
-    `f(args) = build_jax_assemble_eval(ofunc(*args), args)`
+    `f(args) = build_jax_assemble_eval(*args)(ofunc(*args))`
     """
 
-    def jax_assemble_eval(*args):
-        return jax_assemble_eval_p.bind(*args)
+    def decorator(fenics_function: Callable) -> Callable:
+        def jax_assemble_eval(*args):
+            return jax_assemble_eval_p.bind(*args)
 
-    jax_assemble_eval_p = Primitive("jax_assemble_eval")
-    jax_assemble_eval_p.def_impl(
-        lambda *args: assemble_eval(ofunc, fenics_templates, *args)[0]
-    )
-
-    jax_assemble_eval_p.def_abstract_eval(
-        lambda *args: jax.abstract_arrays.make_shaped_array(
-            assemble_eval(ofunc, fenics_templates, *args)[0]
+        jax_assemble_eval_p = Primitive("jax_assemble_eval")
+        jax_assemble_eval_p.def_impl(
+            lambda *args: assemble_eval(fenics_function, fenics_templates, *args)[0]
         )
-    )
 
-    def jax_assemble_eval_batch(vector_arg_values, batch_axes):
-        assert len(set(batch_axes)) == 1  # assert that all batch axes are same
-        assert (
-            batch_axes[0] == 0
-        )  # assert that batch axis is zero, need to rewrite for a general case?
-        # compute function row-by-row
-        res = np.asarray(
-            [
-                jax_assemble_eval(
-                    *(vector_arg_values[j][i] for j in range(len(batch_axes)))
-                )
-                for i in range(vector_arg_values[0].shape[0])
-            ]
+        jax_assemble_eval_p.def_abstract_eval(
+            lambda *args: jax.abstract_arrays.make_shaped_array(
+                assemble_eval(fenics_function, fenics_templates, *args)[0]
+            )
         )
-        return res, batch_axes[0]
 
-    jax.batching.primitive_batchers[jax_assemble_eval_p] = jax_assemble_eval_batch
+        def jax_assemble_eval_batch(vector_arg_values, batch_axes):
+            assert len(set(batch_axes)) == 1  # assert that all batch axes are same
+            assert (
+                batch_axes[0] == 0
+            )  # assert that batch axis is zero, need to rewrite for a general case?
+            # compute function row-by-row
+            res = np.asarray(
+                [
+                    jax_assemble_eval(
+                        *(vector_arg_values[j][i] for j in range(len(batch_axes)))
+                    )
+                    for i in range(vector_arg_values[0].shape[0])
+                ]
+            )
+            return res, batch_axes[0]
 
-    # @trace("djax_assemble_eval")
-    def djax_assemble_eval(*args):
-        return djax_assemble_eval_p.bind(*args)
+        jax.batching.primitive_batchers[jax_assemble_eval_p] = jax_assemble_eval_batch
 
-    djax_assemble_eval_p = Primitive("djax_assemble_eval")
-    # djax_assemble_eval_p.multiple_results = True
-    djax_assemble_eval_p.def_impl(
-        lambda *args: vjp_assemble_eval(ofunc, fenics_templates, *args)
-    )
+        # @trace("djax_assemble_eval")
+        def djax_assemble_eval(*args):
+            return djax_assemble_eval_p.bind(*args)
 
-    defvjp_all(jax_assemble_eval_p, djax_assemble_eval)
+        djax_assemble_eval_p = Primitive("djax_assemble_eval")
+        # djax_assemble_eval_p.multiple_results = True
+        djax_assemble_eval_p.def_impl(
+            lambda *args: vjp_assemble_eval(fenics_function, fenics_templates, *args)
+        )
 
-    return jax_assemble_eval
+        defvjp_all(jax_assemble_eval_p, djax_assemble_eval)
+
+        return jax_assemble_eval
+
+    return decorator

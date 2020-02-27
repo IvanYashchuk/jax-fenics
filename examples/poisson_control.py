@@ -42,43 +42,35 @@ mesh = fn.Mesh(fn.refine(mesh, cf))
 V = fn.FunctionSpace(mesh, "CG", 1)
 W = fn.FunctionSpace(mesh, "DG", 0)
 
+solve_templates = (fn.Function(W),)
+assemble_templates = (fn.Function(V), fn.Function(W))
 
 # Define and solve the Poisson equation
+@build_jax_solve_eval(solve_templates)
 def fenics_solve(f):
     u = fn.Function(V, name="State")
     v = fn.TestFunction(V)
-
     F = (ufl.inner(ufl.grad(u), ufl.grad(v)) - f * v) * ufl.dx
     bc = fn.DirichletBC(V, 0.0, "on_boundary")
     fn.solve(F == 0, u, bc)
-
     return u, F
 
 
-templates = (fn.Function(W),)
-jax_solve = build_jax_solve_eval(templates)(fenics_solve)
-
-
 # Define functional of interest and the reduced functional
-def fenics_assemble_cost(u, f):
+@build_jax_assemble_eval(assemble_templates)
+def fenics_cost(u, f):
     x = ufl.SpatialCoordinate(mesh)
     w = ufl.sin(ufl.pi * x[0]) * ufl.sin(ufl.pi * x[1])
     d = 1 / (2 * ufl.pi ** 2) * w
-
     alpha = fn.Constant(1e-6)
     J_form = (0.5 * ufl.inner(u - d, u - d)) * ufl.dx + alpha / 2 * f ** 2 * ufl.dx
     J = fn.assemble(J_form)
     return J, J_form
 
 
-jax_cost = build_jax_assemble_eval(
-    fenics_assemble_cost, (fn.Function(V), fn.Function(W))
-)
-
-
 def obj_function(x):
-    u = jax_solve(x)
-    cost = jax_cost(u, x)
+    u = fenics_solve(x)
+    cost = fenics_cost(u, x)
     return cost
 
 
