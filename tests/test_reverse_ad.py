@@ -35,7 +35,7 @@ def solve_fenics(kappa0, kappa1):
 
 
 templates = (fenics.Constant(0.0), fenics.Constant(0.0))
-jax_solve_eval = build_jax_solve_eval(solve_fenics, templates)
+jax_solve_eval = build_jax_solve_eval(templates)(solve_fenics)
 
 # multivariate output function
 ff = lambda x, y: np.sqrt(np.square(jax_solve_eval(np.sqrt(x ** 3), y)))  # noqa: E731

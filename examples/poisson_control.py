@@ -56,7 +56,7 @@ def fenics_solve(f):
 
 
 templates = (fn.Function(W),)
-jax_solve = build_jax_solve_eval(fenics_solve, templates)
+jax_solve = build_jax_solve_eval(templates)(fenics_solve)
 
 
 # Define functional of interest and the reduced functional

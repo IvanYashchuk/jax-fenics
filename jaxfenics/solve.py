@@ -8,6 +8,8 @@ from jax.core import Primitive
 from jax.interpreters.ad import defvjp, defvjp_all
 from jax.api import defjvp_all
 
+import functools
+
 from .helpers import (
     numpy_to_fenics,
     fenics_to_numpy,
@@ -256,134 +258,143 @@ def jvp_solve_eval(
     return numpy_output_primal, jax_output_tangent
 
 
-def build_jax_solve_eval(ofunc: Callable, fenics_templates: FenicsVariable) -> Callable:
-    """Return `f(*args) = build_jax_solve_eval(ofunc(*args), args)`.
+def build_jax_solve_eval(fenics_templates: FenicsVariable) -> Callable:
+    """Return `f(*args) = build_jax_solve_eval(*args)(ofunc(*args))`.
     Given the FEniCS-side function ofunc(*args), return the function
-    `f(*args) = build_jax_solve_eval(ofunc(*args), args)` with
+    `f(*args) = build_jax_solve_eval(*args)(ofunc(*args))` with
     the VJP of `f`, where:
     `*args` are all arguments to `ofunc`.
     Args:
     ofunc: The FEniCS-side function to be wrapped.
     Returns:
-    `f(args) = build_jax_solve_eval(ofunc(*args), args)`
+    `f(args) = build_jax_solve_eval(*args)(ofunc(*args))`
     """
 
-    def jax_solve_eval(*args):
-        return jax_solve_eval_p.bind(*args)
+    def decorator(fenics_function: Callable) -> Callable:
+        @functools.wraps(fenics_function)
+        def jax_solve_eval(*args):
+            return jax_solve_eval_p.bind(*args)
 
-    jax_solve_eval_p = Primitive("jax_solve_eval")
-    jax_solve_eval_p.def_impl(
-        lambda *args: solve_eval(ofunc, fenics_templates, *args)[0]
-    )
-
-    jax_solve_eval_p.def_abstract_eval(
-        lambda *args: jax.abstract_arrays.make_shaped_array(
-            solve_eval(ofunc, fenics_templates, *args)[0]
+        jax_solve_eval_p = Primitive("jax_solve_eval")
+        jax_solve_eval_p.def_impl(
+            lambda *args: solve_eval(fenics_function, fenics_templates, *args)[0]
         )
-    )
 
-    def jax_solve_eval_batch(vector_arg_values, batch_axes):
-        assert len(set(batch_axes)) == 1  # assert that all batch axes are same
-        assert (
-            batch_axes[0] == 0
-        )  # assert that batch axis is zero, need to rewrite for a general case?
-        # compute function row-by-row
-        res = np.asarray(
-            [
-                jax_solve_eval(
-                    *(vector_arg_values[j][i] for j in range(len(batch_axes)))
-                )
-                for i in range(vector_arg_values[0].shape[0])
-            ]
+        jax_solve_eval_p.def_abstract_eval(
+            lambda *args: jax.abstract_arrays.make_shaped_array(
+                solve_eval(fenics_function, fenics_templates, *args)[0]
+            )
         )
-        return res, batch_axes[0]
 
-    jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
+        def jax_solve_eval_batch(vector_arg_values, batch_axes):
+            assert len(set(batch_axes)) == 1  # assert that all batch axes are same
+            assert (
+                batch_axes[0] == 0
+            )  # assert that batch axis is zero, need to rewrite for a general case?
+            # compute function row-by-row
+            res = np.asarray(
+                [
+                    jax_solve_eval(
+                        *(vector_arg_values[j][i] for j in range(len(batch_axes)))
+                    )
+                    for i in range(vector_arg_values[0].shape[0])
+                ]
+            )
+            return res, batch_axes[0]
 
-    # @trace("djax_solve_eval")
-    def djax_solve_eval(*args):
-        return djax_solve_eval_p.bind(*args)
+        jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
 
-    djax_solve_eval_p = Primitive("djax_solve_eval")
-    # djax_solve_eval_p.multiple_results = True
-    djax_solve_eval_p.def_impl(
-        lambda *args: vjp_solve_eval(ofunc, fenics_templates, *args)
-    )
+        # @trace("djax_solve_eval")
+        def djax_solve_eval(*args):
+            return djax_solve_eval_p.bind(*args)
 
-    defvjp_all(jax_solve_eval_p, djax_solve_eval)
+        djax_solve_eval_p = Primitive("djax_solve_eval")
+        # djax_solve_eval_p.multiple_results = True
+        djax_solve_eval_p.def_impl(
+            lambda *args: vjp_solve_eval(fenics_function, fenics_templates, *args)
+        )
 
-    return jax_solve_eval
+        defvjp_all(jax_solve_eval_p, djax_solve_eval)
+        return jax_solve_eval
+
+    return decorator
 
 
 # it seems that it is not possible to define custom vjp and jvp rules simultaneusly
 # at least I did not figure out how to do this
 # they override each other
 # therefore here I create a separate wrapped function
-def build_jax_solve_eval_fwd(
-    ofunc: Callable, fenics_templates: FenicsVariable
-) -> Callable:
-    """Return `f(*args) = build_jax_solve_eval(ofunc(*args), args)`. This is forward mode AD.
+def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
+    """Return `f(*args) = build_jax_solve_eval(*args)(ofunc(*args))`. This is forward mode AD.
     Given the FEniCS-side function ofunc(*args), return the function
-    `f(*args) = build_jax_solve_eval(ofunc(*args), args)` with
+    `f(*args) = build_jax_solve_eval(*args)(ofunc(*args))` with
     the VJP of `f`, where:
     `*args` are all arguments to `ofunc`.
     Args:
     ofunc: The FEniCS-side function to be wrapped.
     Returns:
-    `f(args) = build_jax_solve_eval(ofunc(*args), args)`
+    `f(args) = build_jax_solve_eval(*args)(ofunc(*args))`
     """
 
-    def jax_solve_eval(*args):
-        return jax_solve_eval_p.bind(*args)
+    def decorator(fenics_function: Callable) -> Callable:
+        @functools.wraps(fenics_function)
+        def jax_solve_eval(*args):
+            return jax_solve_eval_p.bind(*args)
 
-    jax_solve_eval_p = Primitive("jax_solve_eval")
-    jax_solve_eval_p.def_impl(
-        lambda *args: solve_eval(ofunc, fenics_templates, *args)[0]
-    )
-
-    jax_solve_eval_p.def_abstract_eval(
-        lambda *args: jax.abstract_arrays.make_shaped_array(
-            solve_eval(ofunc, fenics_templates, *args)[0]
+        jax_solve_eval_p = Primitive("jax_solve_eval")
+        jax_solve_eval_p.def_impl(
+            lambda *args: solve_eval(fenics_function, fenics_templates, *args)[0]
         )
-    )
 
-    def jax_solve_eval_batch(vector_arg_values, batch_axes):
-        assert len(set(batch_axes)) == 1  # assert that all batch axes are same
-        assert (
-            batch_axes[0] == 0
-        )  # assert that batch axis is zero, need to rewrite for a general case?
-        # compute function row-by-row
-        res = np.asarray(
-            [
-                jax_solve_eval(
-                    *(vector_arg_values[j][i] for j in range(len(batch_axes)))
-                )
-                for i in range(vector_arg_values[0].shape[0])
-            ]
+        jax_solve_eval_p.def_abstract_eval(
+            lambda *args: jax.abstract_arrays.make_shaped_array(
+                solve_eval(fenics_function, fenics_templates, *args)[0]
+            )
         )
-        return res, batch_axes[0]
 
-    jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
+        def jax_solve_eval_batch(vector_arg_values, batch_axes):
+            assert len(set(batch_axes)) == 1  # assert that all batch axes are same
+            assert (
+                batch_axes[0] == 0
+            )  # assert that batch axis is zero, need to rewrite for a general case?
+            # compute function row-by-row
+            res = np.asarray(
+                [
+                    jax_solve_eval(
+                        *(vector_arg_values[j][i] for j in range(len(batch_axes)))
+                    )
+                    for i in range(vector_arg_values[0].shape[0])
+                ]
+            )
+            return res, batch_axes[0]
 
-    # @trace("jvp_jax_solve_eval")
-    def jvp_jax_solve_eval(ps, ts):
-        return jvp_jax_solve_eval_p.bind(ps, ts)
+        jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
 
-    jvp_jax_solve_eval_p = Primitive("jvp_jax_solve_eval")
-    jvp_jax_solve_eval_p.multiple_results = True
-    jvp_jax_solve_eval_p.def_impl(
-        lambda ps, ts: jvp_solve_eval(ofunc, fenics_templates, ps, ts)
-    )
+        # @trace("jvp_jax_solve_eval")
+        def jvp_jax_solve_eval(ps, ts):
+            return jvp_jax_solve_eval_p.bind(ps, ts)
 
-    jax.interpreters.ad.primitive_jvps[jax_solve_eval_p] = jvp_jax_solve_eval
+        jvp_jax_solve_eval_p = Primitive("jvp_jax_solve_eval")
+        jvp_jax_solve_eval_p.multiple_results = True
+        jvp_jax_solve_eval_p.def_impl(
+            lambda ps, ts: jvp_solve_eval(fenics_function, fenics_templates, ps, ts)
+        )
 
-    # TODO: JAX Tracer goes inside fenics wrappers and zero array is returned
-    # because fenics numpy conversion works only for concrete arrays
-    vjp_jax_solve_eval_p = Primitive("vjp_jax_solve_eval")
-    vjp_jax_solve_eval_p.def_impl(
-        lambda ct, *args: vjp_solve_eval(ofunc, fenics_templates, *args)[1](ct)
-    )
+        jax.interpreters.ad.primitive_jvps[jax_solve_eval_p] = jvp_jax_solve_eval
 
-    jax.interpreters.ad.primitive_transposes[jax_solve_eval_p] = vjp_jax_solve_eval_p
+        # TODO: JAX Tracer goes inside fenics wrappers and zero array is returned
+        # because fenics numpy conversion works only for concrete arrays
+        vjp_jax_solve_eval_p = Primitive("vjp_jax_solve_eval")
+        vjp_jax_solve_eval_p.def_impl(
+            lambda ct, *args: vjp_solve_eval(fenics_function, fenics_templates, *args)[
+                1
+            ](ct)
+        )
 
-    return jax_solve_eval
+        jax.interpreters.ad.primitive_transposes[
+            jax_solve_eval_p
+        ] = vjp_jax_solve_eval_p
+
+        return jax_solve_eval
+
+    return decorator
