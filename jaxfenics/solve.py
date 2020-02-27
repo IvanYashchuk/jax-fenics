@@ -26,7 +26,7 @@ def solve_eval(
     fenics_function: Callable,
     fenics_templates: Iterable[FenicsVariable],
     *args: np.array,
-) -> Tuple[np.array, ufl.Form, Tuple[FenicsVariable]]:
+) -> Tuple[np.array, ufl.Form, Tuple[FenicsVariable], List[fenics.DirichletBC]]:
     """Computes the output of a fenics_function and saves a corresponding gradient tape
     Input:
         fenics_function (callable): FEniCS function to be executed during the forward pass
@@ -44,10 +44,10 @@ def solve_eval(
     out = fenics_function(*fenics_inputs)
     if not isinstance(out, tuple):
         raise ValueError(
-            "FEniCS function output should be in the form (solution, residual_form)."
+            "FEniCS function output should be in the form (solution, residual_form, [bcs])."
         )
 
-    fenics_solution, residual_form = out
+    fenics_solution, residual_form, bcs = out
 
     if isinstance(fenics_solution, tuple):
         raise ValueError(
@@ -56,16 +56,21 @@ def solve_eval(
 
     if not isinstance(fenics_solution, fenics.Function):
         raise ValueError(
-            f"FEniCS function output should be in the form (solution, residual_form). Got {type(fenics_solution)} instead of fenics.Function"
+            f"FEniCS function output should be in the form (solution, residual_form, [bcs]). Got {type(fenics_solution)} instead of fenics.Function"
         )
 
     if not isinstance(residual_form, ufl.Form):
         raise ValueError(
-            f"FEniCS function output should be in the form (solution, residual_form). Got {type(residual_form)} instead of ufl.Form"
+            f"FEniCS function output should be in the form (solution, residual_form, [bcs]). Got {type(residual_form)} instead of ufl.Form"
+        )
+
+    if not isinstance(bcs, list):
+        raise ValueError(
+            f"FEniCS function output should be in the form (solution, residual_form, [bcs]). Got {bcs}."
         )
 
     numpy_output = np.asarray(fenics_to_numpy(fenics_solution))
-    return numpy_output, fenics_solution, residual_form, fenics_inputs
+    return numpy_output, fenics_solution, residual_form, fenics_inputs, bcs
 
 
 def vjp_solve_eval(
@@ -82,7 +87,7 @@ def vjp_solve_eval(
         to the arguments and must return a tuple with length equal to the number of positional arguments to fun.
     """
 
-    numpy_output, fenics_solution, residual_form, fenics_inputs = solve_eval(
+    numpy_output, fenics_solution, residual_form, fenics_inputs, bcs = solve_eval(
         fenics_function, fenics_templates, *args
     )
 
@@ -96,7 +101,9 @@ def vjp_solve_eval(
         lambda g: tuple(
             vjp if vjp is not None else jax.ad_util.zeros_like_jaxval(args[i])
             for i, vjp in enumerate(
-                vjp_solve_eval_impl(g, fenics_solution, residual_form, fenics_inputs)
+                vjp_solve_eval_impl(
+                    g, fenics_solution, residual_form, fenics_inputs, bcs
+                )
             )
         )
     )
@@ -164,6 +171,7 @@ def vjp_solve_eval_impl(
     fenics_solution: fenics.Function,
     fenics_residual: ufl.Form,
     fenics_inputs: List[FenicsVariable],
+    bcs: List[fenics.DirichletBC],
 ) -> Tuple[np.array]:
     """Computes the gradients of the output with respect to the inputs."""
     # Convert tangent covector (adjoint) to a FEniCS variable
@@ -183,8 +191,9 @@ def vjp_solve_eval_impl(
     adj_F = ufl.replace(adj_F, {u_adj: fenics.TrialFunction(V)})
     adj_F_assembled = fenics.assemble(adj_F)
 
-    # TODO: this should be `hbcs = [homogenize(bc) for bc in bcs]`
-    hbcs = [fenics.DirichletBC(V, 0.0, "on_boundary")]
+    for bc in bcs:
+        bc.homogenize()
+    hbcs = bcs
 
     for bc in hbcs:
         bc.apply(adj_F_assembled)
@@ -232,14 +241,17 @@ def jvp_solve_eval(
         fenics_solution_primal,
         residual_form,
         fenics_primals,
+        bcs,
     ) = solve_eval(fenics_function, fenics_templates, *primals)
 
     # Now tangent evaluation!
     F = residual_form
     u = fenics_solution_primal
     V = u.function_space()
-    # TODO: this should be `hbcs = [homogenize(bc) for bc in bcs]`
-    hbcs = [fenics.DirichletBC(V, 0.0, "on_boundary")]
+
+    for bc in bcs:
+        bc.homogenize()
+    hbcs = bcs
 
     fenics_tangents = convert_all_to_fenics(fenics_primals, *tangents)
     fenics_output_tangents = []

@@ -51,9 +51,9 @@ def fenics_solve(f):
     u = fn.Function(V, name="State")
     v = fn.TestFunction(V)
     F = (ufl.inner(ufl.grad(u), ufl.grad(v)) - f * v) * ufl.dx
-    bc = fn.DirichletBC(V, 0.0, "on_boundary")
-    fn.solve(F == 0, u, bc)
-    return u, F
+    bcs = [fn.DirichletBC(V, 0.0, "on_boundary")]
+    fn.solve(F == 0, u, bcs)
+    return u, F, bcs
 
 
 # Define functional of interest and the reduced functional

@@ -24,14 +24,14 @@ def solve_fenics(kappa0, kappa1):
     )
 
     u = fenics.Function(V)
-    bc = fenics.DirichletBC(V, fenics.Constant(0.0), "on_boundary")
+    bcs = [fenics.DirichletBC(V, fenics.Constant(0.0), "on_boundary")]
 
     inner, grad, dx = ufl.inner, ufl.grad, ufl.dx
     JJ = 0.5 * inner(kappa0 * grad(u), grad(u)) * dx - kappa1 * f * u * dx
     v = fenics.TestFunction(V)
     F = fenics.derivative(JJ, u, v)
-    fenics.solve(F == 0, u, bcs=bc)
-    return u, F
+    fenics.solve(F == 0, u, bcs=bcs)
+    return u, F, bcs
 
 
 templates = (fenics.Constant(0.0), fenics.Constant(0.0))
