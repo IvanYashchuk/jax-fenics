@@ -328,7 +328,7 @@ def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
     """Return `f(*args) = build_jax_solve_eval(*args)(ofunc(*args))`. This is forward mode AD.
     Given the FEniCS-side function ofunc(*args), return the function
     `f(*args) = build_jax_solve_eval(*args)(ofunc(*args))` with
-    the VJP of `f`, where:
+    the JVP of `f`, where:
     `*args` are all arguments to `ofunc`.
     Args:
     ofunc: The FEniCS-side function to be wrapped.
