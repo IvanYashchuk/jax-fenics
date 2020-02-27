@@ -1,0 +1,10 @@
+black
+fdm
+flake8
+jax
+jaxlib
+numpy
+pytest
+pytest-check
+pytest-cov
+scipy
