@@ -40,7 +40,7 @@ def test_fenics_to_numpy_mixed_function():
         fenics.Expression(vec_dim * ("x[0]",), element=V.ufl_element()), V
     )
     expected = numpy.linspace(0.05, 0.95, num=10)
-    expected = numpy.tile(expected, (4, 1)).T
+    expected = numpy.reshape(numpy.tile(expected, (4, 1)).T, V.dim())
     assert numpy.allclose(fenics_to_numpy(test_input), expected)
 
 

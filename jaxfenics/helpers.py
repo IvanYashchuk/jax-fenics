@@ -19,10 +19,6 @@ def fenics_to_numpy(fenics_var):
             data = fenics_vec.gather(np.arange(fenics_vec.size(), dtype="I"))
         else:
             data = fenics_vec.get_local()
-        n_sub = fenics_var.function_space().num_sub_spaces()
-        # Reshape if function is in vector function space
-        if n_sub != 0:
-            data = np.reshape(data, (len(data) // n_sub, n_sub))
         return np.asarray(data)
 
     if isinstance(fenics_var, fenics.GenericVector):
@@ -80,12 +76,9 @@ def numpy_to_fenics(numpy_array, fenics_var_template):
         # assume that given numpy/jax array is global array that needs to be distrubuted across processes
         # when FEniCS function is created
         fenics_size = u.vector().size()
-        fenics_n_sub = function_space.num_sub_spaces()
-
-        np_n_sub = numpy_array.shape[-1]
         np_size = numpy_array.size
 
-        if (fenics_n_sub != 0 and np_n_sub != fenics_n_sub) or np_size != fenics_size:
+        if np_size != fenics_size:
             err_msg = (
                 f"Cannot convert numpy array to Function:"
                 f"Wrong size {numpy_array.size} vs {u.vector().size()}"
