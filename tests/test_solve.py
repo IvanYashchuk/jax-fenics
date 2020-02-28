@@ -1,3 +1,5 @@
+import pytest
+
 import jax
 from jax.config import config
 import jax.numpy as np
@@ -43,6 +45,20 @@ def test_fenics_forward():
     numpy_output, _, _, _, _ = solve_eval(solve_fenics, templates, *inputs)
     u, _, _ = solve_fenics(fenics.Constant(0.5), fenics.Constant(0.6))
     assert np.allclose(numpy_output, fenics_to_numpy(u))
+
+
+def test_fenics_forward_wrong_form():
+    def solve_fenics(kappa0, kappa1):
+        u = fenics.Function(V)
+        v = fenics.TestFunction(V)
+        inner, grad, dx = ufl.inner, ufl.grad, ufl.dx
+        JJ = 0.5 * inner(kappa0 * grad(u), grad(v)) * dx  # J is linear form
+        F = fenics.derivative(JJ, u, fenics.TrialFunction(V))  # F is now bilinear form
+        bcs = [fenics.DirichletBC(V, fenics.Constant(0.0), "on_boundary")]
+        return u, F, bcs
+
+    with pytest.raises(ValueError):
+        solve_eval(solve_fenics, templates, *inputs)
 
 
 def test_fenics_vjp():

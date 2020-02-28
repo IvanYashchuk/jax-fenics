@@ -64,6 +64,11 @@ def solve_eval(
             f"FEniCS function output should be in the form (solution, residual_form, [bcs]). Got {type(residual_form)} instead of ufl.Form"
         )
 
+    if len(residual_form.arguments()) != 1:
+        raise ValueError(
+            f"Use `F = L - action(a, u)` if you have linear problem. Got {type(residual_form)} instead of ufl.Form"
+        )
+
     if not isinstance(bcs, list):
         raise ValueError(
             f"FEniCS function output should be in the form (solution, residual_form, [bcs]). Got {bcs}."
