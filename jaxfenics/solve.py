@@ -206,11 +206,8 @@ def vjp_solve_eval_impl(
         if isinstance(fenics_input, fenics.Function):
             V = fenics_input.function_space()
         dFdm = fenics.derivative(F, fenics_input, fenics.TrialFunction(V))
-        adFdm = ufl.adjoint(dFdm)
-        current_args = ufl.algorithms.extract_arguments(adFdm)
-        correct_args = [fenics.TestFunction(V), fenics.TrialFunction(V)]
-        adFdm = ufl.replace(adFdm, dict(list(zip(current_args, correct_args))))
-        result = fenics.assemble(-_action(adFdm, u_adj))
+        adFdm = fenics.adjoint(dFdm)
+        result = fenics.assemble(-adFdm * u_adj)
         if isinstance(fenics_input, fenics.Constant):
             fenics_grad = fenics.Constant(result.sum())
         else:  # fenics.Function
