@@ -196,13 +196,14 @@ def vjp_solve_eval_impl(
     adj_F = ufl.replace(adj_F, {u_adj: fenics.TrialFunction(V)})
     adj_F_assembled = fenics.assemble(adj_F)
 
-    for bc in bcs:
-        bc.homogenize()
-    hbcs = bcs
+    if len(bcs) != 0:
+        for bc in bcs:
+            bc.homogenize()
+        hbcs = bcs
 
-    for bc in hbcs:
-        bc.apply(adj_F_assembled)
-        bc.apply(adj_value)
+        for bc in hbcs:
+            bc.apply(adj_F_assembled)
+            bc.apply(adj_value)
 
     fenics.solve(adj_F_assembled, u_adj.vector(), adj_value)
 
@@ -251,8 +252,9 @@ def jvp_solve_eval(
     u = fenics_solution_primal
     V = u.function_space()
 
-    for bc in bcs:
-        bc.homogenize()
+    if len(bcs) != 0:
+        for bc in bcs:
+            bc.homogenize()
     hbcs = bcs
 
     fenics_tangents = convert_all_to_fenics(fenics_primals, *tangents)
