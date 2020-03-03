@@ -3,11 +3,12 @@
 This package enables use of [FEniCS](http://fenicsproject.org) for solving differentiable variational problems in [JAX](https://github.com/google/jax).
 
 Automatic tangent linear and adjoint solvers are implemented for FEniCS programs involving `fenics.solve` and `fenics.assemble`.
-These solvers makes it possible to use JAX's forward and reverse Automatic Differentiation with FEniCS.
+These solvers make it possible to use JAX's forward and reverse Automatic Differentiation with FEniCS.
 
 Current limitations:
 * Composition of forward and reverse modes for higher-order derivatives is not implemented yet.
 * Differentiating through time-dependent FEniCS programs is not supported, for this case check out [jax-fenics-adjoint](https://github.com/IvanYashchuk/jax-fenics-adjoint) or [jax-firedrake](https://github.com/IvanYashchuk/jax-firedrake).
+  * It is possible to write differentiable time-stepping in JAX, check the [Burgers' equation example](https://github.com/IvanYashchuk/jax-fenics/blob/master/examples/burgers.py).
 
 ## Example
 Here is the demonstration of solving the [Poisson's PDE](https://en.wikipedia.org/wiki/Poisson%27s_equation)
