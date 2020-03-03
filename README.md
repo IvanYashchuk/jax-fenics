@@ -33,7 +33,9 @@ mesh = fenics.UnitSquareMesh(n, n)
 V = fenics.FunctionSpace(mesh, "CG", 1)
 W = fenics.FunctionSpace(mesh, "DG", 0)
 
+# Define FEniCS template representation of JAX input
 templates = (fenics.Function(W),)
+
 @build_jax_solve_eval(templates)
 def fenics_solve(f):
     u = fenics.Function(V, name="PDE Solution")
@@ -58,6 +60,7 @@ jvp_result = jax.vjp(fenics_solve, f)[1](np.ones_like(u))
 
 # or the full (dense) Jacobian matrix du/df with `jax.jacrev`
 dudf = jax.jacrev(fenics_solve)(f)
+
 # our function fenics_solve maps R^200 (dimension of W) to R^121 (dimension of V)
 # therefore the Jacobian matrix dimension is dim V x dim W
 assert dudf.shape == (V.dim(), W.dim())
