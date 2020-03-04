@@ -5,8 +5,10 @@ import jax
 import jax.numpy as np
 
 from jax.core import Primitive
-from jax.interpreters.ad import defvjp, defvjp_all
-from jax.api import defjvp_all
+
+# from jax.interpreters.ad import defvjp, defvjp_all
+# from jax.api import defjvp_all
+from .trace import trace
 
 import functools
 import itertools
@@ -326,7 +328,7 @@ def build_jax_solve_eval(fenics_templates: FenicsVariable) -> Callable:
             lambda *args: vjp_solve_eval(fenics_function, fenics_templates, *args)
         )
 
-        defvjp_all(jax_solve_eval_p, djax_solve_eval)
+        # defvjp_all(jax_solve_eval_p, djax_solve_eval)
         return jax_solve_eval
 
     return decorator
@@ -349,6 +351,12 @@ def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
     """
 
     def decorator(fenics_function: Callable) -> Callable:
+
+        # @jax.api.custom_jvp
+        # def jax_solve_eval(*args):
+        #     return solve_eval(fenics_function, fenics_templates, *args)[0]
+
+        @jax.api.custom_jvp
         @functools.wraps(fenics_function)
         def jax_solve_eval(*args):
             return jax_solve_eval_p.bind(*args)
@@ -364,7 +372,9 @@ def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
             )
         )
 
+        @trace("jax_solve_eval_batch")
         def jax_solve_eval_batch(vector_arg_values, batch_axes):
+            print(vector_arg_values, batch_axes)
             assert len(set(batch_axes)) == 1  # assert that all batch axes are same
             assert (
                 batch_axes[0] == 0
@@ -380,11 +390,16 @@ def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
             )
             return res, batch_axes[0]
 
-        jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
+        # jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
 
-        # @trace("jvp_jax_solve_eval")
+        # def jvp_jax_solve_eval(ps, ts):
+        #     return jvp_solve_eval(fenics_function, fenics_templates, ps, ts)
+
+        # @jax.api.custom_jvp
+        @trace("jvp_jax_solve_eval")
         def jvp_jax_solve_eval(ps, ts):
-            return jvp_jax_solve_eval_p.bind(ps, ts)
+            # return jvp_jax_solve_eval_p.bind(ps, ts)
+            return jvp_solve_eval(fenics_function, fenics_templates, ps, ts)
 
         jvp_jax_solve_eval_p = Primitive("jvp_jax_solve_eval")
         jvp_jax_solve_eval_p.multiple_results = True
@@ -392,20 +407,29 @@ def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
             lambda ps, ts: jvp_solve_eval(fenics_function, fenics_templates, ps, ts)
         )
 
-        jax.interpreters.ad.primitive_jvps[jax_solve_eval_p] = jvp_jax_solve_eval
+        # jax.batching.call_batching_rules[jvp_jax_solve_eval_p] = jax_solve_eval_batch
 
-        # TODO: JAX Tracer goes inside fenics wrappers and zero array is returned
-        # because fenics numpy conversion works only for concrete arrays
-        vjp_jax_solve_eval_p = Primitive("vjp_jax_solve_eval")
-        vjp_jax_solve_eval_p.def_impl(
-            lambda ct, *args: vjp_solve_eval(fenics_function, fenics_templates, *args)[
-                1
-            ](ct)
-        )
+        jax_solve_eval.defjvp(jvp_jax_solve_eval)
 
-        jax.interpreters.ad.primitive_transposes[
-            jax_solve_eval_p
-        ] = vjp_jax_solve_eval_p
+        def dummy(*args):
+            raise NotImplementedError
+
+        # jvp_jax_solve_eval.defjvp(dummy)
+
+        # jax.interpreters.ad.primitive_jvps[jax_solve_eval_p] = jvp_jax_solve_eval
+
+        # # TODO: JAX Tracer goes inside fenics wrappers and zero array is returned
+        # # because fenics numpy conversion works only for concrete arrays
+        # vjp_jax_solve_eval_p = Primitive("vjp_jax_solve_eval")
+        # vjp_jax_solve_eval_p.def_impl(
+        #     lambda ct, *args: vjp_solve_eval(fenics_function, fenics_templates, *args)[
+        #         1
+        #     ](ct)
+        # )
+
+        # jax.interpreters.ad.primitive_transposes[
+        #     jax_solve_eval_p
+        # ] = vjp_jax_solve_eval_p
 
         return jax_solve_eval
 
