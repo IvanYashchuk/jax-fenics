@@ -303,15 +303,8 @@ def build_jax_solve_eval(fenics_templates: FenicsVariable) -> Callable:
             assert (
                 batch_axes[0] == 0
             )  # assert that batch axis is zero, need to rewrite for a general case?
-            # compute function row-by-row
-            res = np.asarray(
-                [
-                    jax_solve_eval(
-                        *(vector_arg_values[j][i] for j in range(len(batch_axes)))
-                    )
-                    for i in range(vector_arg_values[0].shape[0])
-                ]
-            )
+            res = list(map(jax_solve_eval, *vector_arg_values))
+            res = np.asarray(res)
             return res, batch_axes[0]
 
         jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
@@ -369,15 +362,8 @@ def build_jax_solve_eval_fwd(fenics_templates: FenicsVariable) -> Callable:
             assert (
                 batch_axes[0] == 0
             )  # assert that batch axis is zero, need to rewrite for a general case?
-            # compute function row-by-row
-            res = np.asarray(
-                [
-                    jax_solve_eval(
-                        *(vector_arg_values[j][i] for j in range(len(batch_axes)))
-                    )
-                    for i in range(vector_arg_values[0].shape[0])
-                ]
-            )
+            res = list(map(jax_solve_eval, *vector_arg_values))
+            res = np.asarray(res)
             return res, batch_axes[0]
 
         jax.batching.primitive_batchers[jax_solve_eval_p] = jax_solve_eval_batch
