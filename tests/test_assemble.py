@@ -83,6 +83,20 @@ hh1 = lambda y: hh(inputs[0], y, inputs[2])  # noqa: E731
 hh2 = lambda z: hh(inputs[0], inputs[1], z)  # noqa: E731
 
 
+def test_vmap():
+    bdim = 2
+    vinputs = (
+        np.ones((bdim, V.dim())),
+        np.ones((bdim, 1)) * 0.5,
+        np.ones((bdim, 1)) * 0.6,
+    )
+    out = jax.vmap(hh)(*vinputs)
+    with check:
+        assert out.size == bdim
+    with check:
+        assert np.all(out == out[0])
+
+
 def test_jacobian_and_vjp():
     fdm_jac0 = fdm.jacobian(hh0)(inputs[0])
     jax_jac0 = jax.jacrev(hh0)(inputs[0])
