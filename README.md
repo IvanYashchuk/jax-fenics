@@ -71,7 +71,7 @@ Check `examples/` or `tests/` folders for the additional examples.
 First install [FEniCS](http://fenicsproject.org).
 Then install [JAX](https://github.com/google/jax) with:
 
-    python -m pip install --upgrade jax jaxlib  # CPU-only version
+    python -m pip install --upgrade jax==0.1.61 jaxlib==0.1.42  # CPU-only version
 
 After that install the jax-fenics with:
 
