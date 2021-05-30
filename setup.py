@@ -14,5 +14,5 @@ setup(
     author="Ivan Yashchuk",
     license="MIT",
     packages=["jaxfenics"],
-    install_requires=["jax", "fenics", "fdm", "scipy"],
+    install_requires=["jax", "fdm", "scipy"],
 )
